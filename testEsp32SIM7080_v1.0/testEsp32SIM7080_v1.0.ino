@@ -79,6 +79,8 @@ MPU6050 mpu(Wire);
 // #define MISO  13
 // #define MOSI  11
 // #define CS    41
+// #define D2    2
+// #define D1    1
 
 // SPIClass spi = SPIClass(VSPI);
 
@@ -90,12 +92,6 @@ int count = 0;
 char fName[20];
 bool memoryState;
 
-// Variables will change:
-int buttonPushCounter = 0;  // counter for the number of button presses
-int lastButtonState = 0;    // previous state of the button
-uint16_t buttonLog = 0;     //button being logged
-
-
 void setup() {
   Serial.begin(115200);
   unsigned status1;
@@ -103,20 +99,20 @@ void setup() {
   pinMode(pushButton, INPUT);
   pinMode(buzzer, OUTPUT);  // Set buzzer - pin 9 as an output
   Serial.println("Start up...");
-
   pixels.begin();  // INITIALIZE NeoPixel strip object (REQUIRED)
   Serial.println("pixels started..");
+  ledStartup();
   byte status = mpu.begin();
   Serial.println("MPU started..");
-  delay(500);
+  delay(10);
   mpu.calcOffsets(true, true);  // gyro and accelero
-  status1 = bme.begin(0x76);
 
   if (!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)) {
     Serial.println("SPIFFS Mount Failed");
     return;
   }
 
+  status1 = bme.begin(0x77);    //it's 0x77 not 0x76
   if (!status1) {
     Serial.println("Could not find a valid BME280 sensor, check wiring, address, sensor ID!");
     Serial.print("SensorID was: 0x");
@@ -125,12 +121,13 @@ void setup() {
     Serial.print("   ID of 0x56-0x58 represents a BMP 280,\n");
     Serial.print("        ID of 0x60 represents a BME 280.\n");
     Serial.print("        ID of 0x61 represents a BME 680.\n");
-    while (1) delay(10);
+    status1 = bme.begin(0x76);
+    // while (1) delay(10);
   }
 
   //RTC initialize
   RTC.begin();
-  RTC.setDay(8);
+  RTC.setDay(20);
   RTC.setMonth(12);
   RTC.setYear(2022);
   RTC.setWeek(7);  // Always Set weekday after setting Date
@@ -226,7 +223,7 @@ void loop() {
   File file = SPIFFS.open(fName, FILE_APPEND);
 
   // DateTime now = rtc.now();
-  Serial.println("starting...");
+
   mpu.update();
   // put your main code here, to run repeatedly:
   pixels.clear();  // Set all pixel colors to 'off'
@@ -237,7 +234,6 @@ void loop() {
 
   pixels.show();  // Send the updated pixel colors to the hardware.
 
-  Serial.println("Lights completed ...");
 
   //GSR//
   for (int i = 0; i < 10; i++)  //Average the 10 measurements to remove the glitch
@@ -276,9 +272,14 @@ void loop() {
   Serial.print("; GsrAvg:");
   Serial.print(gsr_average);
   Serial.print("; ohm:");
-  Serial.println(gsr_ohm);
+  Serial.print(gsr_ohm);
+  Serial.print("; ");
+  Serial.print(buttonState);
+  Serial.print("; ");
+  Serial.println(buttonLog);
   // Serial.println(F("=====================================================\n"));
-
+  
+  //add the time check of 1 sec if cond here, timerstart millis, a%1000= 0;
   //file print//
   file.print(RTC.getDay());file.print("-");file.print(RTC.getMonth());file.print("-");file.print(RTC.getYear());
   file.print(" ");
@@ -306,25 +307,26 @@ void loop() {
   file.print("; GsrAvg:");
   file.print(gsr_average);
   file.print("; ohm:");
-  file.println(gsr_ohm);
+  file.print(gsr_ohm);
+  file.print("; ");
+  file.print(buttonState);
+  file.print("; ");
+  file.println(buttonLog);
 
   //  LEDLight();
   if (buttonState == 1) {
     // digitalWrite(LEDindicator, HIGH);
     pixels.setPixelColor(0, pixels.Color(50, 0, 0));
     pixels.show();
-    // buzzerFst();
-    // delay(200);
+    buzzerFst();
     // tone(buzzer, 3950);  // Send 1KHz sound signal...
-    // delay(2000);         // ...for 1 sec
     // noTone(buzzer);      // Stop sound...
-    delay(50);
   } else {
     // digitalWrite(LEDindicator, LOW);
-    pixels.setPixelColor(0, pixels.Color(0, 0, 50));
+    // pixels.setPixelColor(0, pixels.Color(0, 0, 50));
+    pixels.clear();
     pixels.show();
     // buzzerSlw();
-    delay(50);
   }
 
   //  counterCheck();
@@ -344,7 +346,7 @@ void loop() {
         //      buttonLog = 0;
       }
       // Delay a little bit to avoid bouncing
-      delay(180); //ori = 50
+      delay(200); //ori = 50
     }
     // save the current state as the last state,
     //for next time through the loop
@@ -355,21 +357,20 @@ void loop() {
     // the modulo function gives you the remainder of
     // the division of two numbers:
   
-    //  if (buttonPushCounter % 2 == 0) {
     if (buttonPushCounter % 2 == 1) {
       pixels.setPixelColor(0, pixels.Color(0, 50, 50));
       pixels.show();
       buttonLog = 1;
+      delay(20);
     } else {
       buttonLog = 0;
-          Serial.println("TimeStamp recording stop");
-      //idk what to put here.
+          // Serial.println("TimeStamp recording stop");
     }
 }
 
 
 void startBuzz() {
-  tone(buzzer, 3550);  // Send 1KHz sound signal...
+  tone(buzzer, 3650);  // Send 1KHz sound signal...
   delay(500);
   noTone(buzzer);  // Stop sound...
   delay(300);
@@ -377,8 +378,8 @@ void startBuzz() {
   delay(300);
   noTone(buzzer);  // Stop sound...
   delay(100);
-  tone(buzzer, 4020);  // Send 1KHz sound signal...
-  delay(400);
+  tone(buzzer, 3920);  // Send 1KHz sound signal...
+  delay(500);
   noTone(buzzer);  // Stop sound...
   delay(50);
 }
@@ -480,4 +481,20 @@ void deleteFile(fs::FS &fs, const char * path) {
   } else {
     Serial.println("- delete failed");
   }
+}
+
+void ledStartup(){
+  for (int i = 0; i < 2; i++){
+    pixels.setPixelColor(0, pixels.Color(150, 50, 75));
+    pixels.show();
+    delay(500);
+    pixels.clear();
+    pixels.show();
+    delay(300);
+  }
+  pixels.setPixelColor(0, pixels.Color(150, 50, 75));
+  pixels.show();
+  delay(1200);
+  pixels.clear();
+  pixels.show();
 }
